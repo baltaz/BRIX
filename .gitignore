@@ -42,3 +42,7 @@ next-env.d.ts
 # capacitor
 /android/
 /ios/
+
+# tools (binarios locales de cursor/node)
+/.tools/
+/dist/
