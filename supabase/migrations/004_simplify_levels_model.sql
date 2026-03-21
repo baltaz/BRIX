@@ -1,0 +1,4 @@
+ALTER TABLE public.levels
+  DROP COLUMN IF EXISTS name,
+  DROP COLUMN IF EXISTS difficulty,
+  DROP COLUMN IF EXISTS retries;
