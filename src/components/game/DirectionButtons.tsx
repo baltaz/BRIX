@@ -14,13 +14,13 @@ export function DirectionButtons() {
   const disabled = phase !== "idle";
 
   return (
-    <div className="grid grid-cols-3 grid-rows-3 gap-1 w-fit mx-auto">
+    <div className="hidden md:grid grid-cols-3 grid-rows-3 gap-1 w-fit mx-auto">
       {buttons.map(({ dir, label, className }) => (
         <button
           key={dir}
           onClick={() => move(dir)}
           disabled={disabled}
-          className={`${className} w-14 h-14 rounded-xl bg-white/10 hover:bg-white/20 active:bg-white/30 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold transition-all active:scale-95`}
+          className={`${className} w-14 h-14 rounded-xl bg-white/25 hover:bg-white/35 active:bg-white/40 disabled:opacity-30 disabled:cursor-not-allowed text-xl font-bold transition-all active:scale-95`}
         >
           {label}
         </button>

@@ -3,9 +3,9 @@ import { Link } from "react-router-dom";
 
 import { LevelEditor, LevelFormData } from "@/components/admin/LevelEditor";
 import { PIECE_COLORS, PieceType, isMatchableType } from "@/lib/game/types";
-import { useAuth } from "@/hooks/useAuth";
-import { signInWithEmail, signInWithMagicLink, signOut } from "@/lib/supabase/auth";
-import { fetchAllLevelsAdmin, supabaseUpsertLevel, supabaseUpdateLevel, supabaseReorderLevels, supabaseDeleteLevel } from "@/lib/supabase/queries";
+import { fetchAllLevelsAdmin, supabaseUpsertLevel, supabaseReorderLevels, supabaseDeleteLevel } from "@/lib/supabase/queries";
+
+const ADMIN_SESSION_KEY = "brix_admin_auth";
 
 interface AdminLevelRow {
   id: string;
@@ -17,21 +17,38 @@ interface AdminLevelRow {
 }
 
 export function AdminLevelsPage() {
-  const { user } = useAuth();
+  const [authenticated, setAuthenticated] = useState(
+    () => sessionStorage.getItem(ADMIN_SESSION_KEY) === "1"
+  );
+  const [pwdInput, setPwdInput] = useState("");
+  const [loginError, setLoginError] = useState<string | null>(null);
+
   const [levels, setLevels] = useState<AdminLevelRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<LevelFormData | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [loginMode, setLoginMode] = useState<"magic" | "password">("magic");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [magicSent, setMagicSent] = useState(false);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [loginLoading, setLoginLoading] = useState(false);
   const [draggedLevelId, setDraggedLevelId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
+
+  function handleLogin(e: React.FormEvent) {
+    e.preventDefault();
+    const expected = import.meta.env.VITE_ADMIN_PWD as string | undefined;
+    if (pwdInput === expected) {
+      sessionStorage.setItem(ADMIN_SESSION_KEY, "1");
+      setAuthenticated(true);
+      setLoginError(null);
+    } else {
+      setLoginError("Contraseña incorrecta.");
+    }
+  }
+
+  function handleLogout() {
+    sessionStorage.removeItem(ADMIN_SESSION_KEY);
+    setAuthenticated(false);
+    setPwdInput("");
+  }
 
   const loadLevels = useCallback(async () => {
     try {
@@ -63,14 +80,14 @@ export function AdminLevelsPage() {
   }, []);
 
   useEffect(() => {
-    if (user?.isAdmin) {
+    if (authenticated) {
       setLoading(true);
       void loadLevels();
       return;
     }
     setLevels([]);
     setLoading(false);
-  }, [loadLevels, user]);
+  }, [loadLevels, authenticated]);
 
   async function handleSave(data: LevelFormData) {
     setSaving(true);
@@ -158,67 +175,7 @@ export function AdminLevelsPage() {
     }
   }
 
-  async function withLoginTimeout<T>(fn: () => Promise<T>, ms = 30000): Promise<T> {
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("timeout"));
-      }, ms);
-      fn().then(
-        (result) => { clearTimeout(timeout); resolve(result); },
-        (err: unknown) => { clearTimeout(timeout); reject(err); }
-      );
-    });
-  }
-
-  function formatLoginError(err: unknown): string {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg === "timeout") {
-      return "Tiempo agotado (30s). Tu proyecto Supabase puede estar pausado — revisá supabase.com/dashboard para reactivarlo, o esperá un momento y volvé a intentar.";
-    }
-    if (msg.toLowerCase().includes("email") && msg.toLowerCase().includes("not confirmed")) {
-      return "Email no confirmado. Revisá tu bandeja de entrada.";
-    }
-    if (msg.toLowerCase().includes("invalid login")) {
-      return "Email o contraseña incorrectos.";
-    }
-    if (msg.toLowerCase().includes("rate limit")) {
-      return "Demasiados intentos. Esperá unos minutos.";
-    }
-    return msg || "Error desconocido.";
-  }
-
-  async function handleMagicLink(e: React.FormEvent) {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError(null);
-    try {
-      // Redirect al origin para evitar problemas de URL allowlist en Supabase
-      await withLoginTimeout(() =>
-        signInWithMagicLink(email, window.location.origin)
-      );
-      setMagicSent(true);
-    } catch (err) {
-      setLoginError(formatLoginError(err));
-    } finally {
-      setLoginLoading(false);
-    }
-  }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setLoginLoading(true);
-    setLoginError(null);
-    try {
-      await withLoginTimeout(() => signInWithEmail(email, password));
-    } catch (loginErr) {
-      setLoginError(formatLoginError(loginErr));
-    } finally {
-      setLoginLoading(false);
-    }
-  }
-
-  // No mostramos spinner de auth: si no hay usuario, mostramos login directamente
-  if (!user || user.isAnonymous) {
+  if (!authenticated) {
     return (
       <main className="min-h-dvh max-w-sm mx-auto px-4 py-12 flex flex-col justify-center">
         <div className="mb-8">
@@ -227,114 +184,24 @@ export function AdminLevelsPage() {
         </div>
 
         <div className="rounded-2xl bg-white/5 border border-white/10 p-6">
-          {/* Mode switcher */}
-          <div className="flex rounded-xl bg-white/5 p-1 mb-6 gap-1">
+          <form onSubmit={handleLogin} className="space-y-3">
+            <input
+              type="password"
+              placeholder="Contraseña"
+              value={pwdInput}
+              onChange={(e) => setPwdInput(e.target.value)}
+              autoFocus
+              className="w-full px-3 py-3 rounded-xl bg-white/10 border border-white/10 focus:border-purple-500 focus:outline-none"
+              required
+            />
+            {loginError && <p className="text-sm text-red-400">{loginError}</p>}
             <button
-              type="button"
-              onClick={() => { setLoginMode("magic"); setLoginError(null); setMagicSent(false); }}
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${loginMode === "magic" ? "bg-purple-600 text-white" : "text-white/50 hover:text-white"}`}
+              type="submit"
+              className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 font-bold transition-colors"
             >
-              Magic link
+              Entrar
             </button>
-            <button
-              type="button"
-              onClick={() => { setLoginMode("password"); setLoginError(null); }}
-              className={`flex-1 py-2 rounded-lg text-sm font-semibold transition-colors ${loginMode === "password" ? "bg-purple-600 text-white" : "text-white/50 hover:text-white"}`}
-            >
-              Contraseña
-            </button>
-          </div>
-
-          {loginMode === "magic" && (
-            magicSent ? (
-              <div className="text-center py-4">
-                <p className="text-2xl mb-3">📬</p>
-                <p className="font-bold mb-1">Revisá tu email</p>
-                <p className="text-sm text-white/50 mb-4">
-                  Te enviamos un link a <span className="text-white/80">{email}</span>.
-                  Hacé clic en él para entrar al admin.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => { setMagicSent(false); setLoginError(null); }}
-                  className="text-sm text-purple-400 hover:text-purple-300 underline"
-                >
-                  Usar otro email
-                </button>
-              </div>
-            ) : (
-              <form onSubmit={(e) => void handleMagicLink(e)} className="space-y-3">
-                <input
-                  type="email"
-                  placeholder="tu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3 py-3 rounded-xl bg-white/10 border border-white/10 focus:border-purple-500 focus:outline-none"
-                  required
-                />
-                {loginError && <p className="text-sm text-red-400">{loginError}</p>}
-                <button
-                  type="submit"
-                  disabled={loginLoading}
-                  className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 font-bold transition-colors"
-                >
-                  {loginLoading ? "Conectando... (puede tardar ~15s)" : "Enviar magic link"}
-                </button>
-              </form>
-            )
-          )}
-
-          {loginMode === "password" && (
-            <form onSubmit={(e) => void handleLogin(e)} className="space-y-3">
-              <input
-                type="email"
-                placeholder="Email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-3 py-3 rounded-xl bg-white/10 border border-white/10 focus:border-purple-500 focus:outline-none"
-                required
-              />
-              <input
-                type="password"
-                placeholder="Contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-3 rounded-xl bg-white/10 border border-white/10 focus:border-purple-500 focus:outline-none"
-                required
-              />
-              {loginError && <p className="text-sm text-red-400">{loginError}</p>}
-              <button
-                type="submit"
-                disabled={loginLoading}
-                className="w-full py-3 rounded-xl bg-purple-600 hover:bg-purple-500 disabled:opacity-40 font-bold transition-colors"
-              >
-                {loginLoading ? "Conectando... (puede tardar ~15s)" : "Entrar"}
-              </button>
-            </form>
-          )}
-        </div>
-      </main>
-    );
-  }
-
-  if (!user.isAdmin) {
-    return (
-      <main className="min-h-dvh max-w-md mx-auto px-4 py-6 flex items-center">
-        <div className="w-full rounded-2xl bg-red-600/10 border border-red-600/20 p-6">
-          <h1 className="text-2xl font-bold text-red-300 mb-2">Acceso denegado</h1>
-          <p className="text-sm text-red-200/80 mb-1">
-            Tu cuenta (<span className="text-red-100">{user.email ?? user.displayName}</span>) no tiene permisos de administrador.
-          </p>
-          <p className="text-xs text-red-200/50 mb-4">
-            Si sos el admin, asegurate de tener <code className="bg-white/10 px-1 rounded">is_admin = true</code> en la tabla <code className="bg-white/10 px-1 rounded">profiles</code> de Supabase.
-          </p>
-          <button
-            type="button"
-            onClick={() => { void signOut(); }}
-            className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-semibold transition-colors"
-          >
-            Cerrar sesión
-          </button>
+          </form>
         </div>
       </main>
     );
@@ -368,7 +235,7 @@ export function AdminLevelsPage() {
           <p className="text-sm text-white/50 mt-2">Arrastrá los niveles para cambiar su posición.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void signOut()} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sm transition-colors">Salir</button>
+          <button type="button" onClick={handleLogout} className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-sm transition-colors">Salir</button>
           <button type="button" onClick={() => { setEditing(buildNewLevelDraft()); setCreating(true); }} className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 font-semibold text-sm transition-colors">+ Nuevo nivel</button>
         </div>
       </div>

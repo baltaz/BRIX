@@ -1,13 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
 import { useGameStore } from "@/lib/store/gameStore";
 import { getNextLevel, loadPublicLevels } from "@/lib/game/catalog";
 import { LevelData } from "@/lib/game/types";
 
 export function LevelCompleteModal() {
-  const { user } = useAuth();
   const phase = useGameStore((s) => s.phase);
   const score = useGameStore((s) => s.score);
   const level = useGameStore((s) => s.level);
@@ -26,7 +23,6 @@ export function LevelCompleteModal() {
   const animatedLevelRef = useRef<string | null>(null);
   const nextLevelRef = useRef<LevelData | null>(null);
   const nextLevelResolvedRef = useRef(false);
-  const shouldPromptLogin = !nextLevel && (!user || user.isAnonymous);
 
   const displayedScore = score + (winBreakdown?.applied ? 0 : bonusTotalDisplay);
 
@@ -107,13 +103,17 @@ export function LevelCompleteModal() {
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        className="absolute inset-0 z-50 flex items-center justify-center rounded-xl bg-black/70"
+        className="absolute inset-0 z-50 flex items-center justify-center"
       >
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          className="mx-4 w-full max-w-sm rounded-2xl border border-white/10 bg-gray-900 p-6 text-center"
+          className="mx-4 w-full max-w-sm rounded-2xl p-6 text-center"
+          style={{
+            background: "#fef8f8",
+            boxShadow: "0 8px 32px rgba(240,66,91,0.35), 0 0 0 1px rgba(255,255,255,0.6)",
+          }}
         >
           <motion.div
             initial={{ rotate: -10 }}
@@ -123,35 +123,33 @@ export function LevelCompleteModal() {
           >
             ★
           </motion.div>
-          <h2 className="mb-2 text-2xl font-bold text-emerald-400">Nivel Completado</h2>
-          <p className="mb-1 text-3xl font-black text-amber-400">{displayedScore.toLocaleString()}</p>
-          <p className="mb-4 text-sm text-white/40">Contabilizando bonus del nivel...</p>
+          <h2 className="mb-2 text-2xl font-black" style={{ color: "#f0425b" }}>Nivel Completado</h2>
+          <p className="mb-1 text-3xl font-black" style={{ color: "#f0425b" }}>{displayedScore.toLocaleString()}</p>
+          <p className="mb-4 text-sm" style={{ color: "#d26a61", opacity: 0.7 }}>Contabilizando bonus del nivel...</p>
 
-          <div className="mb-4 space-y-2 rounded-xl border border-white/10 bg-white/5 p-4 text-left">
+          <div
+            className="mb-4 space-y-2 rounded-xl p-4 text-left"
+            style={{ background: "rgba(240,66,91,0.06)", border: "1px solid rgba(240,66,91,0.15)" }}
+          >
             <BreakdownRow label="Clear" formula="1000 x 1" value={clearDisplay} isActive={activeRow === "clear"} isDone={completedRows.includes("clear")} />
             <BreakdownRow label="Moves" formula={`500 x ${movesLeft}`} value={movesDisplay} isActive={activeRow === "moves"} isDone={completedRows.includes("moves")} />
             <BreakdownRow label="Vidas" formula={`500 x ${livesLeft}`} value={livesDisplay} isActive={activeRow === "lives"} isDone={completedRows.includes("lives")} />
-            <div className="h-px bg-white/10" />
-            <div className={`flex items-center justify-between text-base font-black transition-all duration-150 ${
-              activeRow === "total" ? "scale-[1.03] text-amber-200" : completedRows.includes("total") ? "text-amber-300" : "text-amber-300/80"
-            }`}>
+            <div className="h-px" style={{ background: "rgba(240,66,91,0.15)" }} />
+            <div className={`flex items-center justify-between text-base font-black transition-all duration-150`}
+              style={{ color: activeRow === "total" ? "#f0425b" : "#c9960a", transform: activeRow === "total" ? "scale(1.03)" : undefined }}
+            >
               <span>Total Bonus</span>
               <span>{bonusTotalDisplay.toLocaleString()}</span>
             </div>
           </div>
 
-          <p className="text-xs text-white/50">
+          <p className="text-xs" style={{ color: "#d26a61", opacity: 0.6 }}>
             {isResolvingNextLevel
               ? "Preparando siguiente stage..."
               : nextLevel
                 ? "Siguiente stage en 1 segundo..."
-                : "No hay mas stages. Volviendo al listado..."}
+                : "¡Run completada!"}
           </p>
-          {shouldPromptLogin && (
-            <Link to="/" className="mt-3 inline-flex rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold transition-colors hover:bg-emerald-500">
-              Iniciar sesión para guardar tu run
-            </Link>
-          )}
         </motion.div>
       </motion.div>
     </AnimatePresence>
@@ -161,12 +159,18 @@ export function LevelCompleteModal() {
 function BreakdownRow({ label, formula, value, isActive, isDone }: {
   label: string; formula: string; value: number; isActive: boolean; isDone: boolean;
 }) {
+  const color = isActive ? "#f0425b" : isDone ? "#4ab870" : "#d26a61";
   return (
-    <div className={`flex items-center justify-between gap-4 rounded-lg px-2 py-1 text-sm transition-all duration-150 ${
-      isActive ? "scale-[1.02] bg-white/10 text-white" : isDone ? "bg-emerald-500/10 text-emerald-100" : "text-white/80"
-    }`}>
-      <span className={isActive || isDone ? "text-inherit" : "text-white/70"}>{label} {formula} :</span>
-      <span className="font-black tabular-nums text-inherit">{value.toLocaleString()}</span>
+    <div
+      className="flex items-center justify-between gap-4 rounded-lg px-2 py-1 text-sm transition-all duration-150"
+      style={{
+        color,
+        transform: isActive ? "scale(1.02)" : undefined,
+        background: isActive ? "rgba(240,66,91,0.08)" : isDone ? "rgba(74,184,112,0.08)" : undefined,
+      }}
+    >
+      <span>{label} {formula} :</span>
+      <span className="font-black tabular-nums">{value.toLocaleString()}</span>
     </div>
   );
 }

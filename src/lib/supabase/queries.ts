@@ -12,7 +12,7 @@ interface LevelRow {
 
 interface RankingRow {
   rank_position: number;
-  user_id: string;
+  user_id: string | null;  // null para guests sin cuenta
   display_name: string;
   avatar_url: string | null;
   total_score: number;
@@ -60,14 +60,14 @@ export async function fetchLevelByRouteId(routeId: string): Promise<LevelData | 
   return rowToLevel(data as LevelRow);
 }
 
-export async function saveGameRun(params: {
-  userId: string;
+export async function saveGuestRun(params: {
+  guestName: string;
   finalScore: number;
   levelsCompleted: number;
   lastLevelOrder?: number | null;
 }) {
   const { error } = await supabase.from("game_runs").insert({
-    user_id: params.userId,
+    guest_name: params.guestName,
     final_score: params.finalScore,
     levels_completed: params.levelsCompleted,
     last_level_order: params.lastLevelOrder ?? null,

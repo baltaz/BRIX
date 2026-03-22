@@ -1,16 +1,17 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito:wght@400;700;800&display=swap");
 @import "tailwindcss";
 
 :root {
-  --color-piece-1: #ef4444;
-  --color-piece-2: #3b82f6;
-  --color-piece-3: #22c55e;
-  --color-piece-4: #eab308;
-  --color-piece-5: #a855f7;
-  --color-piece-6: #f97316;
-  --color-piece-7: #06b6d4;
-  --color-piece-8: #ec4899;
-  --board-bg: #1a1050;
-  --cell-bg: rgba(255, 255, 255, 0.04);
+  --color-piece-1: #e8534a;
+  --color-piece-2: #4a7fde;
+  --color-piece-3: #4ab870;
+  --color-piece-4: #c9960a;
+  --color-piece-5: #9050e0;
+  --color-piece-6: #e06030;
+  --color-piece-7: #1aa8cc;
+  --color-piece-8: #d040a0;
+  --board-bg: rgba(180, 50, 30, 0.25);
+  --cell-bg: rgba(255, 255, 255, 0.10);
 }
 
 html,
@@ -21,21 +22,29 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+button,
+a,
+[role="button"] {
+  cursor: pointer;
+}
+
 body {
-  background: linear-gradient(160deg, #0a0618 0%, #150d35 40%, #0d1b2a 100%);
+  background: linear-gradient(160deg, #ff6a56 0%, #f0425b 100%);
+  font-family: "Nunito", sans-serif;
   min-height: 100dvh;
   color: white;
 }
 
 .board-frame {
-  background: linear-gradient(135deg, #1e1560 0%, #130e3a 50%, #1a1450 100%);
+  background: rgba(180, 50, 30, 0.20);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.08),
-    0 4px 24px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    0 0 0 1px rgba(255, 255, 255, 0.15),
+    0 4px 24px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
 }
 
 .grid-cell {
-  background: rgba(255, 255, 255, 0.03);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }

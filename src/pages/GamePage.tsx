@@ -1,17 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { useAuth } from "@/hooks/useAuth";
 import { useGameStore } from "@/lib/store/gameStore";
 import { getNextLevel, loadPublicLevelByRouteId, loadPublicLevels } from "@/lib/game/catalog";
-import { saveGameRun } from "@/lib/supabase/queries";
 import { LevelData } from "@/lib/game/types";
+import { markLevelReached } from "@/lib/progress";
 import { Board } from "@/components/game/Board";
 import { HUD } from "@/components/game/HUD";
-import { DirectionButtons } from "@/components/game/DirectionButtons";
 import { GravityIndicator } from "@/components/game/GravityIndicator";
 import { ComboPopup } from "@/components/game/ComboPopup";
 import { GameOverModal } from "@/components/game/GameOverModal";
 import { LevelCompleteModal } from "@/components/game/LevelCompleteModal";
+import { RunEndModal } from "@/components/game/RunEndModal";
 import { useKeyboard } from "@/hooks/useKeyboard";
 import { useSwipe } from "@/hooks/useSwipe";
 
@@ -20,7 +19,6 @@ export default function GamePage() {
   const [searchParams] = useSearchParams();
   const continueRun = searchParams.get("continue") === "1";
   const navigate = useNavigate();
-  const { user } = useAuth();
   const loadLevel = useGameStore((s) => s.loadLevel);
   const tickDynamicBlocks = useGameStore((s) => s.tickDynamicBlocks);
   const level = useGameStore((s) => s.level);
@@ -31,32 +29,48 @@ export default function GamePage() {
   const winBreakdown = useGameStore((s) => s.winBreakdown);
   const gameRef = useRef<HTMLDivElement>(null);
   const autoAdvanceLevelRef = useRef<string | null>(null);
-  const submittedRunRef = useRef<string | null>(null);
+  const [showRunEnd, setShowRunEnd] = useState(false);
 
   useKeyboard();
   useSwipe(gameRef);
+
+  // Reset showRunEnd cuando cambia el nivel (nueva carga)
+  useEffect(() => {
+    setShowRunEnd(false);
+    autoAdvanceLevelRef.current = null;
+  }, [level?.id]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadCurrentLevel() {
       if (!levelId) {
-        navigate("/levels", { replace: true });
+        navigate("/", { replace: true });
         return;
       }
 
       try {
+        // Caso especial: 'first' carga el primer nivel publicado
+        if (levelId === "first") {
+          const all = await loadPublicLevels();
+          if (cancelled) return;
+          if (all.length === 0) { navigate("/", { replace: true }); return; }
+          navigate(`/game/${all[0].id}`, { replace: true });
+          return;
+        }
+
         const levelData = await loadPublicLevelByRouteId(levelId);
         if (!levelData) {
-          navigate("/levels", { replace: true });
+          navigate("/", { replace: true });
           return;
         }
 
         if (!cancelled) {
           loadLevel(levelData, { preserveRun: continueRun });
+          markLevelReached(levelData.order, levelData.id);
         }
       } catch {
-        navigate("/levels", { replace: true });
+        navigate("/", { replace: true });
       }
     }
 
@@ -75,15 +89,9 @@ export default function GamePage() {
     return () => window.clearInterval(interval);
   }, [tickDynamicBlocks]);
 
-  useEffect(() => {
-    if (phase === "idle") {
-      submittedRunRef.current = null;
-    }
-  }, [phase, level?.id]);
-
+  // Auto-avance al siguiente nivel, o RunEndModal en el último
   useEffect(() => {
     if (phase !== "won" || !level || !winBreakdown?.applied) {
-      autoAdvanceLevelRef.current = null;
       return;
     }
 
@@ -101,17 +109,6 @@ export default function GamePage() {
 
       const nextLevel = resolveNextLevelFromCatalog(levels, currentLevel);
 
-      if (!nextLevel) {
-        await saveRunIfNeeded({
-          outcomeKey: `won:${currentLevel.id}:${score}:${levelsCompletedInRun}`,
-          submittedRunRef,
-          userId: user?.isAnonymous ? null : user?.id ?? null,
-          finalScore: score,
-          levelsCompleted: levelsCompletedInRun,
-          lastLevelOrder: currentLevel.order,
-        });
-      }
-
       await delay(1000);
       if (cancelled) return;
 
@@ -121,7 +118,8 @@ export default function GamePage() {
         return;
       }
 
-      navigate("/levels", { replace: true });
+      // Último nivel completado → fin de run
+      setShowRunEnd(true);
     }
 
     void advanceToNextLevel();
@@ -129,22 +127,13 @@ export default function GamePage() {
     return () => {
       cancelled = true;
     };
-  }, [phase, level, winBreakdown?.applied, loadLevel, navigate, score, levelsCompletedInRun, user]);
+  }, [phase, level, winBreakdown?.applied, loadLevel, navigate]);
 
+  // Sin vidas → fin de run
   useEffect(() => {
-    if (phase !== "lost" || !level || livesLeft > 0) {
-      return;
-    }
-
-    void saveRunIfNeeded({
-      outcomeKey: `lost:${level.id}:${score}:${levelsCompletedInRun}`,
-      submittedRunRef,
-      userId: user?.isAnonymous ? null : user?.id ?? null,
-      finalScore: score,
-      levelsCompleted: levelsCompletedInRun,
-      lastLevelOrder: level.order,
-    });
-  }, [phase, level, livesLeft, score, levelsCompletedInRun, user]);
+    if (phase !== "lost" || !level || livesLeft > 0) return;
+    setShowRunEnd(true);
+  }, [phase, level, livesLeft]);
 
   if (!level) {
     return (
@@ -157,9 +146,9 @@ export default function GamePage() {
   return (
     <div
       ref={gameRef}
-      className="min-h-dvh flex flex-col items-center max-w-md mx-auto px-2 py-2 select-none"
+      className="min-h-dvh flex flex-col items-center max-w-md mx-auto py-2 select-none"
     >
-      <div className="w-full flex items-center justify-between mb-1">
+      <div className="w-full flex items-center justify-between mb-1 px-3">
         <Link
           to="/levels"
           className="text-sm text-white/40 hover:text-white/70 transition-colors px-2 py-1"
@@ -172,7 +161,9 @@ export default function GamePage() {
         <div className="w-16" />
       </div>
 
-      <HUD />
+      <div className="w-full px-3">
+        <HUD />
+      </div>
 
       <div className="relative flex-1 w-full flex items-center justify-center min-h-0">
         <Board />
@@ -180,14 +171,21 @@ export default function GamePage() {
         <ComboPopup />
         <GameOverModal />
         <LevelCompleteModal />
+        {showRunEnd && (
+          <RunEndModal
+            score={score}
+            levelsCompleted={levelsCompletedInRun}
+            lastLevelOrder={level.order}
+          />
+        )}
       </div>
 
-      <div className="py-4">
-        <DirectionButtons />
-      </div>
-
-      <p className="text-[10px] text-white/20 pb-2">
-        Swipe o flechas del teclado para cambiar la gravedad
+      {/* Leyenda de controles */}
+      <p className="hidden md:block text-center text-xs font-bold text-white/50 py-3 tracking-wide">
+        ← ↑ → ↓ &nbsp; Usá las flechas del teclado para mover
+      </p>
+      <p className="md:hidden text-center text-xs font-bold text-white/50 py-3 tracking-wide">
+        Deslizá para mover las piezas
       </p>
     </div>
   );
@@ -195,31 +193,6 @@ export default function GamePage() {
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function saveRunIfNeeded(params: {
-  outcomeKey: string;
-  submittedRunRef: React.MutableRefObject<string | null>;
-  userId: string | null;
-  finalScore: number;
-  levelsCompleted: number;
-  lastLevelOrder: number;
-}) {
-  if (!params.userId) return;
-  if (params.submittedRunRef.current === params.outcomeKey) return;
-
-  params.submittedRunRef.current = params.outcomeKey;
-
-  try {
-    await saveGameRun({
-      userId: params.userId,
-      finalScore: params.finalScore,
-      levelsCompleted: params.levelsCompleted,
-      lastLevelOrder: params.lastLevelOrder,
-    });
-  } catch (error) {
-    console.error("[game_runs] save:error", error);
-  }
 }
 
 function resolveNextLevelFromCatalog(levels: LevelData[], currentLevel: LevelData): LevelData | null {

@@ -1,175 +1,170 @@
+import { useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Piece as PieceData,
-  PIECE_COLORS,
   PieceType,
   WALL_TYPE,
   MOBILE_WALL_TYPE,
   isDynamicType,
 } from "@/lib/game/types";
+import { useGameStore } from "@/lib/store/gameStore";
+import { PIECE_STYLE } from "@/lib/game/pieceStyles";
 
 interface PieceProps {
   piece: PieceData;
   cellSize: number;
 }
 
-type MonsterFaceConfig = {
-  eyeY: string;
-  eyeSize: string;
-  eyeGap: string;
-  eyeTilt?: number;
-  mouthWidth: string;
-  mouthHeight: string;
-  mouthRadius: string;
-  mouthTop: string;
-  mouthColor: string;
-  toothCount: number;
-  toothColor: string;
-  cheekColor?: string;
-  hornColor?: string;
-  brow?: boolean;
+/**
+ * Per-type Framer Motion spring config — subtle differences create
+ * the illusion of different weights. Purely visual, no gameplay impact.
+ */
+const SPRING_BY_TYPE: Record<number, { stiffness: number; damping: number; mass: number }> = {
+  1: { stiffness: 420, damping: 24, mass: 0.55 }, // muy rápido
+  2: { stiffness: 280, damping: 32, mass: 1.10 }, // lento / pesado
+  3: { stiffness: 460, damping: 22, mass: 0.50 }, // rapidísimo
+  4: { stiffness: 250, damping: 34, mass: 1.20 }, // el más lento
+  5: { stiffness: 380, damping: 26, mass: 0.70 }, // medio-rápido
+  6: { stiffness: 340, damping: 28, mass: 0.85 }, // medio
+  7: { stiffness: 430, damping: 23, mass: 0.58 }, // rápido
+  8: { stiffness: 300, damping: 30, mass: 1.00 }, // medio-lento
 };
 
-const MONSTER_FACES: Record<PieceType, MonsterFaceConfig> = {
-  1: {
-    eyeY: "33%",
-    eyeSize: "11%",
-    eyeGap: "16%",
-    mouthWidth: "38%",
-    mouthHeight: "18%",
-    mouthRadius: "999px",
-    mouthTop: "63%",
-    mouthColor: "#4a0404",
-    toothCount: 4,
-    toothColor: "#fee2e2",
-    hornColor: "#7f1d1d",
-    brow: true,
-  },
-  2: {
-    eyeY: "40%",
-    eyeSize: "10%",
-    eyeGap: "18%",
-    mouthWidth: "24%",
-    mouthHeight: "18%",
-    mouthRadius: "50%",
-    mouthTop: "61%",
-    mouthColor: "#082f49",
-    toothCount: 1,
-    toothColor: "#dbeafe",
-    cheekColor: "#93c5fd",
-  },
-  3: {
-    eyeY: "29%",
-    eyeSize: "30%",
-    eyeGap: "0%",
-    mouthWidth: "34%",
-    mouthHeight: "15%",
-    mouthRadius: "999px",
-    mouthTop: "66%",
-    mouthColor: "#14532d",
-    toothCount: 2,
-    toothColor: "#fef9c3",
-    hornColor: "#14532d",
-  },
-  4: {
-    eyeY: "42%",
-    eyeSize: "10%",
-    eyeGap: "20%",
-    mouthWidth: "34%",
-    mouthHeight: "16%",
-    mouthRadius: "999px",
-    mouthTop: "60%",
-    mouthColor: "#78350f",
-    toothCount: 5,
-    toothColor: "#fff7ed",
-    brow: true,
-  },
-  5: {
-    eyeY: "38%",
-    eyeSize: "17%",
-    eyeGap: "18%",
-    eyeTilt: -6,
-    mouthWidth: "42%",
-    mouthHeight: "14%",
-    mouthRadius: "999px",
-    mouthTop: "63%",
-    mouthColor: "#3b0764",
-    toothCount: 2,
-    toothColor: "#ede9fe",
-    hornColor: "#581c87",
-  },
-  6: {
-    eyeY: "36%",
-    eyeSize: "11%",
-    eyeGap: "18%",
-    mouthWidth: "40%",
-    mouthHeight: "16%",
-    mouthRadius: "999px",
-    mouthTop: "61%",
-    mouthColor: "#7c2d12",
-    toothCount: 4,
-    toothColor: "#fff7ed",
-    hornColor: "#9a3412",
-  },
-  7: {
-    eyeY: "42%",
-    eyeSize: "12%",
-    eyeGap: "16%",
-    mouthWidth: "16%",
-    mouthHeight: "18%",
-    mouthRadius: "999px",
-    mouthTop: "58%",
-    mouthColor: "#164e63",
-    toothCount: 1,
-    toothColor: "#ecfeff",
-    cheekColor: "#f9a8d4",
-  },
-  8: {
-    eyeY: "35%",
-    eyeSize: "12%",
-    eyeGap: "18%",
-    mouthWidth: "18%",
-    mouthHeight: "8%",
-    mouthRadius: "999px",
-    mouthTop: "60%",
-    mouthColor: "#9f1239",
-    toothCount: 0,
-    toothColor: "#ffe4e6",
-    cheekColor: "#fde68a",
-  },
-};
+const DEFAULT_SPRING = { stiffness: 350, damping: 28, mass: 0.8 };
 
-/** Static wall tile — matches the diagonal-stripe style of the original Puzznic */
+/**
+ * Static wall tile con fusión visual y esquinas internas cóncavas redondeadas.
+ *
+ * Técnica:
+ * - Cada tile calcula su rectángulo extendido hacia sus vecinos de pared
+ * - La sombra inferior se omite cuando hay vecino abajo (evita bandas oscuras)
+ * - Las esquinas INTERNAS (donde el muro dobla hacia dentro) se recortan con
+ *   `clip-path: path()` usando arcos SVG para crear la curva cóncava real
+ */
 function WallTile({ piece, cellSize, gap }: { piece: PieceData; cellSize: number; gap: number }) {
+  const pieces = useGameStore((s) => s.pieces);
+
+  const wallSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of pieces) {
+      if (p.type === WALL_TYPE) set.add(`${p.row},${p.col}`);
+    }
+    return set;
+  }, [pieces]);
+
+  const hasTop    = wallSet.has(`${piece.row - 1},${piece.col}`);
+  const hasBottom = wallSet.has(`${piece.row + 1},${piece.col}`);
+  const hasLeft   = wallSet.has(`${piece.row},${piece.col - 1}`);
+  const hasRight  = wallSet.has(`${piece.row},${piece.col + 1}`);
+
+  // Diagonales — necesarias para detectar esquinas internas
+  const hasDiagTL = wallSet.has(`${piece.row - 1},${piece.col - 1}`);
+  const hasDiagTR = wallSet.has(`${piece.row - 1},${piece.col + 1}`);
+  const hasDiagBR = wallSet.has(`${piece.row + 1},${piece.col + 1}`);
+  const hasDiagBL = wallSet.has(`${piece.row + 1},${piece.col - 1}`);
+
+  // Esquina interna: dos vecinos ortogonales presentes pero sin diagonal
+  const innerTL = hasTop && hasLeft  && !hasDiagTL;
+  const innerTR = hasTop && hasRight && !hasDiagTR;
+  const innerBR = hasBottom && hasRight && !hasDiagBR;
+  const innerBL = hasBottom && hasLeft  && !hasDiagBL;
+
+  const inset = 3;
+  const br    = 8; // border-radius en esquinas exteriores
+
+  const cellX = piece.col * (cellSize + gap);
+  const cellY = piece.row * (cellSize + gap);
+
+  const x1 = hasLeft   ? cellX - gap            : cellX + inset;
+  const y1 = hasTop    ? cellY - gap            : cellY + inset;
+  const x2 = hasRight  ? cellX + cellSize + gap : cellX + cellSize - inset;
+  const y2 = hasBottom ? cellY + cellSize + gap : cellY + cellSize - inset;
+
+  const W = x2 - x1;
+  const H = y2 - y1;
+
+  const tlR = hasTop || hasLeft   ? 0 : br;
+  const trR = hasTop || hasRight  ? 0 : br;
+  const brR = hasBottom || hasRight ? 0 : br;
+  const blR = hasBottom || hasLeft  ? 0 : br;
+
+  // Radio del arco cóncavo en esquinas internas: tamaño de la protuberancia
+  const n = inset + gap; // 3 + 2 = 5px
+
+  // Construye un clip-path: path() con arcos SVG cóncavos en cada esquina interna.
+  // Arco: A n,n 0 0 0 (sweep=0=CCW en SVG coords Y-down) → curva hacia el interior.
+  const clipPath = (innerTL || innerTR || innerBR || innerBL)
+    ? buildConcaveClipPath(W, H, n, innerTL, innerTR, innerBR, innerBL)
+    : undefined;
+
   return (
     <div
       className="absolute"
       style={{
-        width: cellSize,
-        height: cellSize,
-        left: piece.col * (cellSize + gap),
-        top: piece.row * (cellSize + gap),
-        // Diagonal stripe pattern resembling the original NES wall tiles
-        background:
-          "repeating-linear-gradient(45deg, #71717a 0px, #71717a 3px, #a1a1aa 3px, #a1a1aa 9px)",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.25), inset 0 -1px 0 rgba(0,0,0,0.35)",
-        border: "1px solid #52525b",
-        borderRadius: 3,
+        left:   x1,
+        top:    y1,
+        width:  W,
+        height: H,
+        background: "#ddd4cf",
+        borderRadius: `${tlR}px ${trR}px ${brR}px ${blR}px`,
+        boxShadow: hasBottom ? "none" : "0px 5px 0px rgba(90,55,45,0.55)",
+        clipPath,
       }}
-    >
-      {/* Top-left corner highlight for 3D look */}
-      <div
-        className="absolute inset-0 rounded-sm"
-        style={{
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 50%)",
-        }}
-      />
-    </div>
+    />
   );
 }
 
+/**
+ * Genera un `clip-path: path()` con arcos SVG cóncavos (sweep=0) en cada
+ * esquina interna indicada. El resultado es una forma con "mordidas" redondeadas
+ * en las esquinas que conectan dos tramos de pared sin diagonal.
+ *
+ * Geometría: para la esquina BR, el arco va de (W, H-n) a (W-n, H) con radio n
+ * y sweep=0 (CCW en SVG/Y-down), lo que produce una curva que se mete hacia
+ * el interior del tile — efecto cóncavo real.
+ */
+function buildConcaveClipPath(
+  W: number, H: number, n: number,
+  tl: boolean, tr: boolean, br: boolean, bl: boolean,
+): string {
+  const a = `A ${n},${n} 0 0 0`; // arco cóncavo reutilizable
+  const parts: string[] = [];
+
+  // Punto de inicio (esquina superior-izquierda)
+  parts.push(tl ? `M 0,${n}` : `M 0,0`);
+  if (tl) parts.push(`${a} ${n},0`);
+
+  // Borde superior → esquina superior-derecha
+  if (tr) {
+    parts.push(`L ${W - n},0`);
+    parts.push(`${a} ${W},${n}`);
+  } else {
+    parts.push(`L ${W},0`);
+  }
+
+  // Borde derecho → esquina inferior-derecha
+  if (br) {
+    parts.push(`L ${W},${H - n}`);
+    parts.push(`${a} ${W - n},${H}`);
+  } else {
+    parts.push(`L ${W},${H}`);
+  }
+
+  // Borde inferior → esquina inferior-izquierda
+  if (bl) {
+    parts.push(`L ${n},${H}`);
+    parts.push(`${a} 0,${H - n}`);
+  } else {
+    parts.push(`L 0,${H}`);
+  }
+
+  // Borde izquierdo de vuelta al inicio
+  parts.push("Z");
+
+  return `path('${parts.join(" ")}')`;
+}
+
+/** Animated mobile wall tile — crema más oscura + sombra 3D, se mueve con gravedad */
 function MobileWallTile({
   piece,
   cellSize,
@@ -179,6 +174,8 @@ function MobileWallTile({
   cellSize: number;
   gap: number;
 }) {
+  const inset = 2;
+  const innerSize = cellSize - inset * 2;
   return (
     <motion.div
       layout
@@ -187,30 +184,24 @@ function MobileWallTile({
         x: piece.col * (cellSize + gap),
         y: piece.row * (cellSize + gap),
       }}
-      transition={{ type: "spring", stiffness: 350, damping: 28, mass: 0.8 }}
+      transition={{ type: "spring", ...DEFAULT_SPRING }}
       className="absolute"
-      style={{
-        width: cellSize,
-        height: cellSize,
-        borderRadius: 4,
-        background:
-          "repeating-linear-gradient(45deg, #3f3f46 0px, #3f3f46 3px, #52525b 3px, #52525b 9px)",
-        border: "1px solid #27272a",
-        boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.45), 0 4px 10px rgba(0,0,0,0.35)",
-      }}
+      style={{ width: cellSize, height: cellSize, padding: inset }}
     >
       <div
-        className="absolute inset-[5px] rounded-sm border border-white/10"
         style={{
-          background:
-            "linear-gradient(135deg, rgba(255,255,255,0.05), rgba(0,0,0,0.14))",
+          width: innerSize,
+          height: innerSize,
+          background: "#c8bdb8",
+          borderRadius: 8,
+          boxShadow: "0px 5px 0px rgba(70,40,30,0.55)",
         }}
       />
     </motion.div>
   );
 }
 
+/** Dynamic block tile — amber/orange gradient, visually distinct */
 function DynamicBlockTile({
   piece,
   cellSize,
@@ -235,12 +226,12 @@ function DynamicBlockTile({
       style={{
         width: cellSize,
         height: cellSize,
-        borderRadius: 5,
+        borderRadius: 6,
         background:
-          "linear-gradient(135deg, #0f766e 0%, #14b8a6 45%, #67e8f9 100%)",
-        border: "1px solid rgba(8,145,178,0.9)",
+          "linear-gradient(135deg, #92400e 0%, #d97706 45%, #fde68a 100%)",
+        border: "1px solid rgba(180, 100, 0, 0.8)",
         boxShadow:
-          "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.35), 0 0 18px rgba(45,212,191,0.28)",
+          "inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(0,0,0,0.30), 0 0 16px rgba(217,119,6,0.35)",
       }}
     >
       <div className="absolute inset-[5px] rounded-sm bg-black/10" />
@@ -269,7 +260,6 @@ function DynamicBlockTile({
 export function Piece({ piece, cellSize }: PieceProps) {
   const gap = 2;
 
-  // Wall tiles render statically — no animation, no matching
   if (piece.type === WALL_TYPE) {
     return <WallTile piece={piece} cellSize={cellSize} gap={gap} />;
   }
@@ -282,10 +272,11 @@ export function Piece({ piece, cellSize }: PieceProps) {
     return <DynamicBlockTile piece={piece} cellSize={cellSize} gap={gap} />;
   }
 
-  const color = PIECE_COLORS[piece.type as PieceType];
+  const type = piece.type as PieceType;
+  const style = PIECE_STYLE[type];
+  const spring = SPRING_BY_TYPE[type] ?? DEFAULT_SPRING;
   const inset = 2;
   const innerSize = cellSize - inset * 2;
-  const face = MONSTER_FACES[piece.type as PieceType];
 
   return (
     <AnimatePresence>
@@ -301,61 +292,38 @@ export function Piece({ piece, cellSize }: PieceProps) {
             opacity: 1,
           }}
           exit={{
-            scale: [1.2, 0],
+            scale: [1.25, 0],
             opacity: [1, 0],
-            transition: { duration: 0.35, ease: "easeIn" },
+            transition: { duration: 0.32, ease: "easeIn" },
           }}
-          transition={{
-            type: "spring",
-            stiffness: 350,
-            damping: 28,
-            mass: 0.8,
-          }}
+          transition={{ type: "spring", ...spring }}
           className="absolute"
-          style={{
-            width: cellSize,
-            height: cellSize,
-            padding: inset,
-          }}
+          style={{ width: cellSize, height: cellSize, padding: inset }}
         >
-          {/* Outer glow */}
           <div
-            className="absolute inset-0 rounded-lg opacity-40 blur-sm"
-            style={{ backgroundColor: color }}
-          />
-
-          {/* Main piece body */}
-          <div
-            className="relative w-full h-full rounded-lg overflow-hidden"
             style={{
               width: innerSize,
               height: innerSize,
-              backgroundColor: color,
-              boxShadow: `0 2px 10px ${color}66, inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -2px 4px rgba(0,0,0,0.25)`,
+              background: style.background,
+              borderRadius: 8,
+              boxShadow: style.shadow,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
-            <div
-              className="absolute inset-x-0 top-0 h-[40%] rounded-t-lg"
+            <span
               style={{
-                background:
-                  "linear-gradient(to bottom, rgba(255,255,255,0.35), transparent)",
+                fontFamily: "Nunito, sans-serif",
+                fontWeight: 800,
+                fontSize: cellSize * 0.42,
+                color: style.color,
+                lineHeight: 1,
+                userSelect: "none",
               }}
-            />
-            <div
-              className="absolute inset-[7%] rounded-[18px]"
-              style={{
-                background:
-                  "radial-gradient(circle at 30% 25%, rgba(255,255,255,0.22), transparent 32%), linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.12))",
-              }}
-            />
-            <div
-              className="absolute inset-x-0 bottom-0 h-[30%]"
-              style={{
-                background:
-                  "linear-gradient(to top, rgba(0,0,0,0.3), transparent)",
-              }}
-            />
-            <MonsterFace face={face} />
+            >
+              {type}
+            </span>
           </div>
         </motion.div>
       ) : (
@@ -368,166 +336,24 @@ export function Piece({ piece, cellSize }: PieceProps) {
             opacity: 1,
           }}
           animate={{
-            scale: [1, 1.4, 0],
-            opacity: [1, 0.8, 0],
+            scale: [1, 1.35, 0],
+            opacity: [1, 0.9, 0],
           }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
+          transition={{ duration: 0.38, ease: "easeOut" }}
           className="absolute pointer-events-none"
-          style={{
-            width: cellSize,
-            height: cellSize,
-          }}
+          style={{ width: cellSize, height: cellSize }}
         >
           <div
-            className="w-full h-full rounded-lg"
             style={{
-              backgroundColor: color,
-              boxShadow: `0 0 20px ${color}, 0 0 40px ${color}88`,
+              width: "100%",
+              height: "100%",
+              borderRadius: 8,
+              background: style.background,
+              boxShadow: `0 0 18px ${style.color}, 0 0 36px ${style.color}88`,
             }}
           />
         </motion.div>
       )}
     </AnimatePresence>
-  );
-}
-
-function MonsterFace({ face }: { face: MonsterFaceConfig }) {
-  return (
-    <>
-      {face.hornColor && (
-        <>
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: "18%",
-              height: "18%",
-              left: "18%",
-              top: "8%",
-              background: face.hornColor,
-              clipPath: "polygon(50% 0%, 100% 100%, 0% 100%)",
-              transform: "rotate(-18deg)",
-              opacity: 0.9,
-            }}
-          />
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: "18%",
-              height: "18%",
-              right: "18%",
-              top: "8%",
-              background: face.hornColor,
-              clipPath: "polygon(50% 0%, 100% 100%, 0% 100%)",
-              transform: "rotate(18deg)",
-              opacity: 0.9,
-            }}
-          />
-        </>
-      )}
-
-      <div
-        className="absolute rounded-full bg-black/80"
-        style={{
-          width: face.eyeSize,
-          height: face.eyeSize,
-          left: `calc(50% - ${face.eyeGap})`,
-          top: face.eyeY,
-          transform: `translateX(-50%) rotate(${face.eyeTilt ?? 0}deg)`,
-        }}
-      />
-      <div
-        className="absolute rounded-full bg-black/80"
-        style={{
-          width: face.eyeSize,
-          height: face.eyeSize,
-          left: `calc(50% + ${face.eyeGap})`,
-          top: face.eyeY,
-          transform: `translateX(-50%) rotate(${(face.eyeTilt ?? 0) * -1}deg)`,
-        }}
-      />
-
-      {face.brow && (
-        <>
-          <div
-            className="absolute bg-black/35 rounded-full"
-            style={{
-              width: "18%",
-              height: "4%",
-              left: "22%",
-              top: "28%",
-              transform: "rotate(-14deg)",
-            }}
-          />
-          <div
-            className="absolute bg-black/35 rounded-full"
-            style={{
-              width: "18%",
-              height: "4%",
-              right: "22%",
-              top: "28%",
-              transform: "rotate(14deg)",
-            }}
-          />
-        </>
-      )}
-
-      {face.cheekColor && (
-        <>
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: "16%",
-              height: "10%",
-              left: "18%",
-              top: "54%",
-              background: face.cheekColor,
-              opacity: 0.9,
-            }}
-          />
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: "16%",
-              height: "10%",
-              right: "18%",
-              top: "54%",
-              background: face.cheekColor,
-              opacity: 0.9,
-            }}
-          />
-        </>
-      )}
-
-      <div
-        className="absolute left-1/2 -translate-x-1/2 overflow-hidden"
-        style={{
-          width: face.mouthWidth,
-          height: face.mouthHeight,
-          top: face.mouthTop,
-          borderRadius: face.mouthRadius,
-          background: face.mouthColor,
-          boxShadow: "inset 0 2px 0 rgba(255,255,255,0.08)",
-        }}
-      >
-        {face.toothCount > 0 && (
-          <div
-            className="absolute inset-x-[10%] top-0 flex justify-between"
-            style={{ height: "42%" }}
-          >
-            {Array.from({ length: face.toothCount }).map((_, index) => (
-              <div
-                key={index}
-                style={{
-                  width: `${Math.max(8, 55 / face.toothCount)}%`,
-                  height: "100%",
-                  background: face.toothColor,
-                  clipPath: "polygon(50% 100%, 0 0, 100% 0)",
-                }}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </>
   );
 }
