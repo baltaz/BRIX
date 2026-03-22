@@ -147,7 +147,6 @@ export default function GamePage() {
     <div
       ref={gameRef}
       className="min-h-dvh flex flex-col items-center max-w-md mx-auto py-2 select-none"
-      style={{ touchAction: "none" }}
     >
       <div className="w-full flex items-center justify-between mb-1 px-3">
         <Link
