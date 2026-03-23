@@ -1,4 +1,5 @@
 import { supabase } from "./client";
+import { adminSupabase } from "./adminClient";
 import { LevelData, GridTemplate } from "@/lib/game/types";
 
 interface LevelRow {
@@ -114,7 +115,7 @@ export async function fetchOwnProfile(userId: string): Promise<ProfileRow | null
 }
 
 export async function fetchAllLevelsAdmin(): Promise<LevelRow[]> {
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from("levels")
     .select("*")
     .order("order", { ascending: true });
@@ -131,7 +132,7 @@ export async function supabaseUpsertLevel(params: {
   is_published: boolean;
 }): Promise<LevelRow> {
   if (params.id) {
-    const { data, error } = await supabase
+    const { data, error } = await adminSupabase
       .from("levels")
       .update({
         order: params.order,
@@ -147,7 +148,7 @@ export async function supabaseUpsertLevel(params: {
     return data as LevelRow;
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await adminSupabase
     .from("levels")
     .insert({
       order: params.order,
@@ -163,7 +164,7 @@ export async function supabaseUpsertLevel(params: {
 }
 
 export async function supabaseUpdateLevel(id: string, updates: Record<string, unknown>) {
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from("levels")
     .update(updates)
     .eq("id", id);
@@ -173,7 +174,7 @@ export async function supabaseUpdateLevel(id: string, updates: Record<string, un
 
 export async function supabaseReorderLevels(items: Array<{ id: string; order: number }>) {
   for (const item of items) {
-    const { error } = await supabase
+    const { error } = await adminSupabase
       .from("levels")
       .update({ order: item.order })
       .eq("id", item.id);
@@ -183,7 +184,7 @@ export async function supabaseReorderLevels(items: Array<{ id: string; order: nu
 }
 
 export async function supabaseDeleteLevel(id: string) {
-  const { error } = await supabase
+  const { error } = await adminSupabase
     .from("levels")
     .delete()
     .eq("id", id);

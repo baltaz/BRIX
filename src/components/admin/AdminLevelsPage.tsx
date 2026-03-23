@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { LevelEditor, LevelFormData } from "@/components/admin/LevelEditor";
 import { PIECE_COLORS, PieceType, isMatchableType } from "@/lib/game/types";
 import { fetchAllLevelsAdmin, supabaseUpsertLevel, supabaseReorderLevels, supabaseDeleteLevel } from "@/lib/supabase/queries";
+import { invalidatePublicLevelsCache } from "@/lib/game/catalog";
 
 const ADMIN_SESSION_KEY = "brix_admin_auth";
 
@@ -110,6 +111,7 @@ export function AdminLevelsPage() {
       };
 
       setLevels((prev) => upsertAdminLevel(prev, nextLevel));
+      invalidatePublicLevelsCache();
       setCreating(false);
       setEditing(null);
     } catch (saveError) {
