@@ -4,22 +4,33 @@ import { Direction } from "@/lib/game/types";
 
 const MIN_SWIPE_DISTANCE = 30;
 
-export function useSwipe(elementRef: React.RefObject<HTMLElement | null>) {
-  const move = useGameStore((s) => s.move);
-  const phase = useGameStore((s) => s.phase);
+/**
+ * Detecta swipes en window (no en un ref) para garantizar que los listeners
+ * estén activos desde el primer render, incluso cuando el nivel todavía
+ * está cargando y el contenedor del juego no existe aún.
+ * move y phase se leen desde refs para evitar closures stale sin recrear listeners.
+ */
+export function useSwipe() {
+  const moveRef  = useRef(useGameStore.getState().move);
+  const phaseRef = useRef(useGameStore.getState().phase);
   const startPos = useRef<{ x: number; y: number } | null>(null);
 
-  useEffect(() => {
-    const el = elementRef.current;
-    if (!el) return;
+  // Mantiene las refs actualizadas ante cambios de estado sin re-crear listeners
+  useEffect(() =>
+    useGameStore.subscribe((s) => {
+      moveRef.current  = s.move;
+      phaseRef.current = s.phase;
+    }),
+  []);
 
+  useEffect(() => {
     function handleTouchStart(e: TouchEvent) {
       const touch = e.touches[0];
       startPos.current = { x: touch.clientX, y: touch.clientY };
     }
 
     function handleTouchEnd(e: TouchEvent) {
-      if (!startPos.current || phase !== "idle") {
+      if (!startPos.current || phaseRef.current !== "idle") {
         startPos.current = null;
         return;
       }
@@ -31,25 +42,22 @@ export function useSwipe(elementRef: React.RefObject<HTMLElement | null>) {
 
       const absDx = Math.abs(dx);
       const absDy = Math.abs(dy);
-
       if (Math.max(absDx, absDy) < MIN_SWIPE_DISTANCE) return;
 
-      let direction: Direction;
-      if (absDx > absDy) {
-        direction = dx > 0 ? "right" : "left";
-      } else {
-        direction = dy > 0 ? "down" : "up";
-      }
+      const direction: Direction =
+        absDx > absDy
+          ? dx > 0 ? "right" : "left"
+          : dy > 0 ? "down"  : "up";
 
-      move(direction);
+      moveRef.current(direction);
     }
 
-    el.addEventListener("touchstart", handleTouchStart, { passive: true });
-    el.addEventListener("touchend", handleTouchEnd, { passive: true });
+    window.addEventListener("touchstart", handleTouchStart, { passive: true });
+    window.addEventListener("touchend",   handleTouchEnd,   { passive: true });
 
     return () => {
-      el.removeEventListener("touchstart", handleTouchStart);
-      el.removeEventListener("touchend", handleTouchEnd);
+      window.removeEventListener("touchstart", handleTouchStart);
+      window.removeEventListener("touchend",   handleTouchEnd);
     };
-  }, [elementRef, move, phase]);
+  }, []); // ← vacío: se registra una vez al montar, funciona siempre
 }

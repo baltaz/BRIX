@@ -32,7 +32,7 @@ export default function GamePage() {
   const [showRunEnd, setShowRunEnd] = useState(false);
 
   useKeyboard();
-  useSwipe(gameRef);
+  useSwipe();
 
   // Reset showRunEnd cuando cambia el nivel (nueva carga)
   useEffect(() => {

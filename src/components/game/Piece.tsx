@@ -71,14 +71,17 @@ function WallTile({ piece, cellSize, gap }: { piece: PieceData; cellSize: number
 
   const inset = 3;
   const br    = 8; // border-radius en esquinas exteriores
+  // Cada tile se extiende gap/2 hacia su vecino (punto de encuentro exacto,
+  // sin superposición) — esto evita que las sombras se dupliquen en los bordes.
+  const ext = gap >> 1; // 1px para gap=2
 
   const cellX = piece.col * (cellSize + gap);
   const cellY = piece.row * (cellSize + gap);
 
-  const x1 = hasLeft   ? cellX - gap            : cellX + inset;
-  const y1 = hasTop    ? cellY - gap            : cellY + inset;
-  const x2 = hasRight  ? cellX + cellSize + gap : cellX + cellSize - inset;
-  const y2 = hasBottom ? cellY + cellSize + gap : cellY + cellSize - inset;
+  const x1 = hasLeft   ? cellX - ext            : cellX + inset;
+  const y1 = hasTop    ? cellY - ext            : cellY + inset;
+  const x2 = hasRight  ? cellX + cellSize + ext : cellX + cellSize - inset;
+  const y2 = hasBottom ? cellY + cellSize + ext : cellY + cellSize - inset;
 
   const W = x2 - x1;
   const H = y2 - y1;
@@ -88,8 +91,8 @@ function WallTile({ piece, cellSize, gap }: { piece: PieceData; cellSize: number
   const brR = hasBottom || hasRight ? 0 : br;
   const blR = hasBottom || hasLeft  ? 0 : br;
 
-  // Radio del arco cóncavo en esquinas internas: tamaño de la protuberancia
-  const n = inset + gap; // 3 + 2 = 5px
+  // Radio del arco cóncavo: inset + ext (tamaño exacto de la protuberancia)
+  const n = inset + ext; // 3 + 1 = 4px
 
   // Construye un clip-path: path() con arcos SVG cóncavos en cada esquina interna.
   // Arco: A n,n 0 0 0 (sweep=0=CCW en SVG coords Y-down) → curva hacia el interior.
