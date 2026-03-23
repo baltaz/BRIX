@@ -22,6 +22,7 @@ const MEDAL_STYLES: Record<number, { shadow: string; color: string }> = {
 export default function RankingPage() {
   const [searchParams] = useSearchParams();
   const isNewRun = searchParams.get("new") === "true";
+  const newName  = searchParams.get("name") ?? null;
 
   const [rankings, setRankings] = useState<RankingEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,23 +67,6 @@ export default function RankingPage() {
         <h1 className="text-2xl font-black text-white">Ranking Global</h1>
       </div>
 
-      {isNewRun && (
-        <motion.div
-          initial={{ opacity: 0, y: -8 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 rounded-2xl px-4 py-4 text-center"
-          style={{
-            background: "#fef8f8",
-            boxShadow: "0px 5px 0px rgba(0,0,0,0.12)",
-          }}
-        >
-          <p className="text-2xl mb-1">🏆</p>
-          <p className="font-black text-sm" style={{ color: "#f0425b" }}>
-            ¡Tu score fue guardado en el ranking!
-          </p>
-        </motion.div>
-      )}
-
       {loading && (
         <div className="flex justify-center py-20">
           <div
@@ -114,16 +98,20 @@ export default function RankingPage() {
         <div className="flex flex-col gap-2">
           {rankings.map((entry) => {
             const medal = MEDAL_STYLES[entry.rank_position];
+            const isMe = isNewRun && newName !== null && entry.display_name === newName;
+            const dimmed = isNewRun && !isMe;
             return (
               <motion.div
                 key={entry.rank_position}
                 initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
+                animate={{ opacity: dimmed ? 0.35 : 1, x: 0 }}
                 transition={{ delay: (entry.rank_position - 1) * 0.03 }}
                 className="flex items-center gap-3 p-3 rounded-xl"
                 style={{
-                  background: "rgba(255,255,255,0.15)",
-                  border: "1px solid rgba(255,255,255,0.20)",
+                  background: isMe ? "rgba(255,255,255,0.30)" : "rgba(255,255,255,0.15)",
+                  border: isMe
+                    ? "1px solid rgba(255,255,255,0.60)"
+                    : "1px solid rgba(255,255,255,0.20)",
                 }}
               >
                 <div

@@ -29,7 +29,7 @@ export function RunEndModal({ score, levelsCompleted, lastLevelOrder }: RunEndMo
         lastLevelOrder,
       });
       resetProgress();
-      navigate("/ranking?new=true");
+      navigate(`/ranking?new=true&name=${encodeURIComponent(trimmed.slice(0, 20))}`);
     } catch {
       setError("No se pudo guardar. Intentá de nuevo.");
       setSaving(false);

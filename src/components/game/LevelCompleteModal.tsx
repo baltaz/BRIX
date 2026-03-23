@@ -120,6 +120,7 @@ export function LevelCompleteModal() {
             animate={{ rotate: [0, -5, 5, 0] }}
             transition={{ duration: 0.5, delay: 0.3 }}
             className="mb-3 text-5xl"
+            style={{ color: "#f3c381", textShadow: "0px 4px 0px #dea083" }}
           >
             ★
           </motion.div>
