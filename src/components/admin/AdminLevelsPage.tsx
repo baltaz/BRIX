@@ -69,12 +69,8 @@ export function AdminLevelsPage() {
       const message =
         loadError instanceof Error
           ? loadError.message
-          : "No se pudo cargar el backoffice.";
-      if (message.includes("schema cache") || message.includes("levels")) {
-        setError("Supabase está conectado, pero falta ejecutar las migraciones.");
-      } else {
-        setError("No tienes acceso al backoffice. Inicia sesión con un usuario admin.");
-      }
+          : String(loadError);
+      setError(`Error: ${message}`);
     } finally {
       setLoading(false);
     }

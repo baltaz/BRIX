@@ -11,7 +11,11 @@
     "cap:add:ios": "npx cap add ios",
     "cap:add:android": "npx cap add android",
     "cap:open:ios": "npx cap open ios",
-    "cap:open:android": "npx cap open android"
+    "cap:open:android": "npx cap open android",
+    "db:start": "npx supabase start",
+    "db:stop": "npx supabase stop",
+    "db:reset": "npx supabase db reset",
+    "db:studio": "open http://127.0.0.1:54323"
   },
   "dependencies": {
     "@capacitor/cli": "^8.2.0",
@@ -31,9 +35,10 @@
     "@types/node": "^25.5.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.5.2",
+    "supabase": "^2.83.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^5.9.3",
-    "vite": "^6.3.5",
-    "@vitejs/plugin-react": "^4.5.2"
+    "vite": "^6.3.5"
   }
 }
